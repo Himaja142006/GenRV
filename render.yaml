@@ -9,3 +9,7 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: 3.13.0
+      - key: SECRET_KEY
+        generateValue: true
+    plan: free
+    branch: main
