@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GenRV</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #E6E6FA, #9370DB, #8A2BE2);
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #4A148C;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .input-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            border: 2px solid #E6E6FA;
+            border-radius: 12px;
+            background-color: rgba(230, 230, 250, 0.3);
+        }
+        .full-width {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        select, input {
+            padding: 12px;
+            margin: 8px;
+            border: 2px solid #9370DB;
+            border-radius: 8px;
+            font-size: 16px;
+            background-color: white;
+            transition: all 0.3s ease;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #8A2BE2;
+            box-shadow: 0 0 5px rgba(138, 43, 226, 0.3);
+        }
+        button {
+            padding: 12px 25px;
+            background-color: #8A2BE2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        button:hover {
+            background-color: #7B1FA2;
+            transform: translateY(-2px);
+        }
+        .result {
+            margin-top: 30px;
+            padding: 25px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            border: 2px solid #E6E6FA;
+        }
+        .plot {
+            margin-top: 30px;
+            width: 100%;
+            height: 450px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        .stats-box {
+            margin-top: 30px;
+            padding: 25px;
+            background-color: rgba(230, 230, 250, 0.3);
+            border-radius: 12px;
+            border: 2px solid #9370DB;
+        }
+        .speech-status {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            font-style: italic;
+            color: #4A148C;
+        }
+        #micButton {
+            background-color: #9370DB;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 25px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #micButton.listening {
+            background-color: #FF4081;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .language-select {
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 8px;
+            border: 2px solid #9370DB;
+            width: 200px;
+            font-size: 16px;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+        #params {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+        }
+        .param-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .param-label {
+            color: #4A148C;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎲 GenRV</h1>
+        
+        <div class="input-section">
+            <select id="language" class="language-select">
+                <option value="en-US">English</option>
+                <option value="te-IN">Telugu</option>
+                <option value="ta-IN">Tamil</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="kn-IN">Kannada</option>
+            </select>
+            <button id="micButton" onclick="toggleSpeech()">
+                🎤 <span id="micButtonText">Start Speech Input</span>
+            </button>
+            <div id="speechFeedback" class="speech-status">Click the microphone and speak in your selected language</div>
+            
+            <div class="controls">
+                <select id="distribution" onchange="updateParams()">
+                    <option value="normal">Normal Distribution</option>
+                    <option value="uniform">Uniform Distribution</option>
+                    <option value="poisson">Poisson Distribution</option>
+                    <option value="rayleigh">Rayleigh Distribution</option>
+                    <option value="laplace">Laplace Distribution</option>
+                    <option value="exponential">Exponential Distribution</option>
+                    <option value="binomial">Binomial Distribution</option>
+                </select>
+                
+                <div id="params"></div>
+                <button onclick="generateRandom()">Generate Random Variable</button>
+            </div>
+        </div>
+
+        <div id="result" class="result"></div>
+        <div id="stats" class="stats-box"></div>
+        <div id="pdfPlot" class="plot"></div>
+        <div id="cdfPlot" class="plot"></div>
+    </div>
+
+    <script>
+        let recognition = null;
+        let isListening = false;
+
+        const distributions = {
+            'normal': {
+                keywords: {
+                    'en': ['normal', 'gaussian', 'bell curve', 'gauss'],
+                    'te': ['సాధారణ', 'నార్మల్', 'గాసియన్'],
+                    'ta': ['இயல்பான', 'சாதாரண', 'காசியன்'],
+                    'hi': ['सामान्य', 'नॉर्मल', 'गाऊसी'],
+                    'kn': ['ಸಾಮಾನ್ಯ', 'ನಾರ್ಮಲ್', 'ಗಾಸಿಯನ್']
+                }
+            },
+            'uniform': {
+                keywords: {
+                    'en': ['uniform', 'rectangular', 'equal'],
+                    'te': ['ఏకరీతి', 'యూనిఫారమ్', 'సమాన'],
+                    'ta': ['சீரான', 'யூனிஃபார்ம்', 'சமமான'],
+                    'hi': ['एकसमान', 'यूनिफॉर्म', 'समान'],
+                    'kn': ['ಏಕರೂಪ', 'ಯೂನಿಫಾರ್ಮ್', 'ಸಮಾನ']
+                }
+            },
+            'poisson': {
+                keywords: {
+                    'en': ['poisson', 'poison', 'pois'],
+                    'te': ['పాయిసన్', 'పాయిజన్', 'పాయిస్సన్'],
+                    'ta': ['பாய்சன்', 'பொய்சன்', 'பாய்சான்'],
+                    'hi': ['पोइसन', 'पॉइसन', 'प्वासों'],
+                    'kn': ['ಪೊಯಿಸನ್', 'ಪಾಯಿಸನ್', 'ಪೊಯಿಸ್ಸನ್']
+                }
+            },
+            'rayleigh': {
+                keywords: {
+                    'en': ['rayleigh', 'ray lay', 'ray', 'raleigh'],
+                    'te': ['రేలే', 'రేలి', 'రేలై'],
+                    'ta': ['ரேலே', 'ரேலி', 'ரேலை'],
+                    'hi': ['रेले', 'रेली', 'रैले'],
+                    'kn': ['ರೇಲೆ', 'ರೇಲಿ', 'ರೇಲೈ']
+                }
+            },
+            'laplace': {
+                keywords: {
+                    'en': ['laplace', 'la place', 'lap', 'laplacian'],
+                    'te': ['లాప్లాస్', 'లాప్లేస్', 'లాప్'],
+                    'ta': ['லாப்லஸ்', 'லாப்லேஸ்', 'லாப்'],
+                    'hi': ['लाप्लास', 'लाप्लेस', 'लाप'],
+                    'kn': ['ಲಾಪ್ಲಾಸ್', 'ಲಾಪ್ಲೇಸ್', 'ಲಾಪ್']
+                }
+            },
+            'exponential': {
+                keywords: {
+                    'en': ['exponential', 'expo', 'exp'],
+                    'te': ['ఘాతీయ', 'ఎక్స్పొనెన్షియల్', 'ఎక్స్పో'],
+                    'ta': ['அடுக்கு', 'எக்ஸ்போனென்ஷியல்', 'எக்ஸ்போ'],
+                    'hi': ['घातीय', 'एक्सपोनेंशियल', 'एक्सपो'],
+                    'kn': ['ಘಾತೀಯ', 'ಎಕ್ಸ್ಪೊನೆನ್ಶಿಯಲ್', 'ಎಕ್ಸ್ಪೊ']
+                }
+            },
+            'binomial': {
+                keywords: {
+                    'en': ['binomial', 'binary', 'bi', 'bernoulli'],
+                    'te': ['ద్వివిధ', 'బైనోమియల్', 'ద్వి'],
+                    'ta': ['இருபடி', 'பைனோமியல்', 'இரு'],
+                    'hi': ['द्विपद', 'बाइनोमियल', 'द्वि'],
+                    'kn': ['ದ್ವಿಪದ', 'ಬೈನೋಮಿಯಲ್', 'ದ್ವಿ']
+                }
+            }
+        };
+
+        const generateCommands = {
+            'en': ['generate', 'create', 'give', 'show', 'make', 'plot'],
+            'te': ['సృష్టించు', 'తయారుచేయి', 'ఇవ్వు', 'చూపించు', 'చేయి'],
+            'ta': ['உருவாக்கு', 'செய்', 'கொடு', 'காட்டு', 'அமை'],
+            'hi': ['बनाओ', 'तैयार करो', 'दो', 'दिखाओ', 'करो'],
+            'kn': ['ರಚಿಸು', 'ಮಾಡು', 'ಕೊಡು', 'ತೋರಿಸು', 'ನಿರ್ಮಿಸು']
+        };
+
+        function setupSpeechRecognition() {
+            try {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    document.getElementById('micButton').style.display = 'none';
+                    document.getElementById('speechFeedback').textContent = 'Speech recognition is not supported in this browser. Please use Chrome or Edge.';
+                    return;
+                }
+
+                // Use the standard SpeechRecognition if available, otherwise use webkitSpeechRecognition
+                const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognitionAPI();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onstart = function() {
+                    isListening = true;
+                    document.getElementById('micButton').classList.add('listening');
+                    document.getElementById('micButtonText').textContent = 'Listening...';
+                    document.getElementById('speechFeedback').textContent = 'Listening...';
+                };
+
+                recognition.onend = function() {
+                    isListening = false;
+                    document.getElementById('micButton').classList.remove('listening');
+                    document.getElementById('micButtonText').textContent = 'Start Speech Input';
+                    if (!document.getElementById('speechFeedback').textContent.includes('You said:')) {
+                        document.getElementById('speechFeedback').textContent = 'Click the microphone and speak in your selected language';
+                    }
+                };
+
+                recognition.onerror = function(event) {
+                    console.error('Speech recognition error:', event.error);
+                    isListening = false;
+                    document.getElementById('micButton').classList.remove('listening');
+                    document.getElementById('micButtonText').textContent = 'Start Speech Input';
+                    
+                    let errorMessage = 'Error: ';
+                    switch(event.error) {
+                        case 'no-speech':
+                            errorMessage += 'No speech was detected. Please try again.';
+                            break;
+                        case 'audio-capture':
+                            errorMessage += 'No microphone was found. Ensure it is plugged in and allowed.';
+                            break;
+                        case 'not-allowed':
+                            errorMessage += 'Microphone permission was denied. Please allow microphone access.';
+                            break;
+                        default:
+                            errorMessage += event.error;
+                    }
+                    document.getElementById('speechFeedback').textContent = errorMessage;
+                };
+
+                recognition.onresult = function(event) {
+                    const text = event.results[0][0].transcript.toLowerCase();
+                    document.getElementById('speechFeedback').textContent = 'You said: ' + text;
+                    console.log('Speech recognized:', text);
+
+                    // Get current language code (en, te, ta, hi, kn)
+                    const langCode = document.getElementById('language').value.split('-')[0];
+                    console.log('Current language:', langCode);
+
+                    // Check for distribution
+                    let foundDist = null;
+                    for (let [dist, data] of Object.entries(distributions)) {
+                        if (data.keywords[langCode].some(keyword => text.includes(keyword.toLowerCase()))) {
+                            foundDist = dist;
+                            break;
+                        }
+                    }
+
+                    // Check for generate command
+                    const hasGenerateCommand = generateCommands[langCode].some(cmd => 
+                        text.includes(cmd.toLowerCase())
+                    );
+
+                    console.log('Found distribution:', foundDist);
+                    console.log('Has generate command:', hasGenerateCommand);
+
+                    if (foundDist) {
+                        document.getElementById('distribution').value = foundDist;
+                        updateParams();
+                        document.getElementById('speechFeedback').textContent = 
+                            `Detected distribution: ${foundDist}`;
+                        
+                        if (hasGenerateCommand) {
+                            generateRandom();
+                        }
+                    } else {
+                        document.getElementById('speechFeedback').textContent = 
+                            'Could not detect a valid distribution. Please try again.';
+                    }
+                };
+
+                console.log('Speech recognition setup completed');
+            } catch (error) {
+                console.error('Error setting up speech recognition:', error);
+                document.getElementById('micButton').style.display = 'none';
+                document.getElementById('speechFeedback').textContent = 'Error setting up speech recognition: ' + error.message;
+            }
+        }
+
+        function toggleSpeech() {
+            if (!recognition) {
+                setupSpeechRecognition();
+            }
+            
+            if (isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.lang = document.getElementById('language').value;
+                    recognition.start();
+                } catch (error) {
+                    console.error('Error starting speech recognition:', error);
+                    document.getElementById('speechFeedback').textContent = 'Error starting speech recognition: ' + error.message;
+                }
+            }
+        }
+
+        function updateParams() {
+            const dist = document.getElementById('distribution').value;
+            const paramsDiv = document.getElementById('params');
+            paramsDiv.innerHTML = '';
+
+            const paramConfigs = {
+                'normal': [
+                    { name: 'mu', label: 'Mean (μ)', type: 'number', value: 0 },
+                    { name: 'sigma', label: 'Standard Deviation (σ)', type: 'number', value: 1, min: 0 }
+                ],
+                'uniform': [
+                    { name: 'a', label: 'Minimum (a)', type: 'number', value: 0 },
+                    { name: 'b', label: 'Maximum (b)', type: 'number', value: 1 }
+                ],
+                'poisson': [
+                    { name: 'lambda', label: 'Rate (λ)', type: 'number', value: 1, min: 0 }
+                ],
+                'rayleigh': [
+                    { name: 'scale', label: 'Scale (σ)', type: 'number', value: 1, min: 0 }
+                ],
+                'laplace': [
+                    { name: 'loc', label: 'Location (μ)', type: 'number', value: 0 },
+                    { name: 'scale', label: 'Scale (b)', type: 'number', value: 1, min: 0 }
+                ],
+                'exponential': [
+                    { name: 'scale', label: 'Scale (1/λ)', type: 'number', value: 1, min: 0 }
+                ],
+                'binomial': [
+                    { name: 'n', label: 'Number of trials (n)', type: 'number', value: 10, min: 1, step: 1 },
+                    { name: 'p', label: 'Success probability (p)', type: 'number', value: 0.5, min: 0, max: 1, step: 0.1 }
+                ]
+            };
+
+            paramConfigs[dist].forEach(param => {
+                const group = document.createElement('div');
+                group.className = 'param-group';
+                
+                const label = document.createElement('label');
+                label.className = 'param-label';
+                label.textContent = param.label;
+                
+                const input = document.createElement('input');
+                input.type = param.type;
+                input.id = param.name;
+                input.value = param.value;
+                if (param.min !== undefined) input.min = param.min;
+                if (param.max !== undefined) input.max = param.max;
+                if (param.step !== undefined) input.step = param.step;
+                
+                group.appendChild(label);
+                group.appendChild(input);
+                paramsDiv.appendChild(group);
+            });
+        }
+
+        function generateRandom() {
+            const dist = document.getElementById('distribution').value;
+            const params = {};
+            
+            // Get parameters based on distribution type
+            document.querySelectorAll('#params input').forEach(input => {
+                params[input.id] = parseFloat(input.value);
+            });
+
+            fetch('/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    distribution: dist,
+                    params: params
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('result').innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                    return;
+                }
+
+                // Display the generated value and explanation
+                document.getElementById('result').innerHTML = `
+                    <h3>Generated Value</h3>
+                    <p style="font-size: 1.2em; font-weight: bold;">${data.sample}</p>
+                    <p>${data.explanation}</p>
+                `;
+
+                // Display statistics
+                const stats = data.statistics;
+                document.getElementById('stats').innerHTML = `
+                    <h3>Statistical Properties</h3>
+                    <p><strong>Moments about Origin:</strong> [${stats.moments.map(m => m.toFixed(4)).join(', ')}]</p>
+                    <p><strong>Central Moments:</strong> [${stats.central_moments.map(m => m.toFixed(4)).join(', ')}]</p>
+                    <p><strong>Skewness:</strong> ${stats.skewness.toFixed(4)}</p>
+                    <p><strong>Kurtosis:</strong> ${stats.kurtosis.toFixed(4)}</p>
+                    <p><strong>Moment Generating Function:</strong> ${stats.mgf}</p>
+                    <p><strong>Characteristic Function:</strong> ${stats.cf}</p>
+                `;
+
+                // Plot PDF
+                Plotly.newPlot('pdfPlot', [{
+                    x: data.pdf_data.x,
+                    y: data.pdf_data.y,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'PDF/PMF',
+                    line: {
+                        color: '#8A2BE2',
+                        width: 2
+                    }
+                }], {
+                    title: 'Probability Density/Mass Function',
+                    xaxis: { title: 'x' },
+                    yaxis: { title: 'f(x)' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(255,255,255,0.9)',
+                    font: { color: '#4A148C' }
+                });
+
+                // Plot CDF
+                Plotly.newPlot('cdfPlot', [{
+                    x: data.cdf_data.x,
+                    y: data.cdf_data.y,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'CDF',
+                    line: {
+                        color: '#9370DB',
+                        width: 2
+                    }
+                }], {
+                    title: 'Cumulative Distribution Function',
+                    xaxis: { title: 'x' },
+                    yaxis: { title: 'F(x)' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(255,255,255,0.9)',
+                    font: { color: '#4A148C' }
+                });
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            });
+        }
+
+        // Initialize parameters on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, setting up speech recognition...');
+            setupSpeechRecognition();
+            updateParams();
+        });
+    </script>
+</body>
+</html>
